@@ -340,32 +340,34 @@ export default function Calculator() {
         </div>
       </div>
 
-      {/* Footer Totals — estilo cuaderno de colegio */}
-      <footer className="border-t-2 border-foreground/30 bg-background sticky bottom-0 z-10">
-        <div className="w-full px-6 py-5">
-          {/* Total Vendido */}
-          <div className="flex justify-between items-baseline border-b border-foreground/15 py-3 px-2">
-            <span className="font-sans text-base font-medium text-foreground tracking-wide">
-              Total Vendido
-            </span>
-            <FlashValue
-              value={totalFormatted}
-              className="font-mono text-2xl font-bold tabular-nums text-foreground"
-            />
-          </div>
-          {/* Línea doble para comisión */}
-          <div className="flex justify-between items-baseline border-b-4 border-double border-foreground/30 py-3 px-2">
-            <span className="font-sans text-base font-semibold text-foreground tracking-wide">
-              Comisión a Pagar ({pct}%)
-            </span>
-            <FlashValue
-              value={comisionFormatted}
-              className="font-mono text-3xl font-bold tabular-nums text-primary"
-            />
+      {/* Footer Totals — centrado, compacto */}
+      <footer className="border-t-2 border-foreground/30 bg-card sticky bottom-0 z-10 px-4 py-4">
+        <div className="mx-auto w-full max-w-[800px]">
+          <div className="mx-auto max-w-md">
+            {/* Total Vendido */}
+            <div className="flex justify-between items-baseline border-b border-foreground/15 py-2">
+              <span className="font-sans text-sm font-medium text-foreground tracking-wide">
+                Total Vendido
+              </span>
+              <FlashValue
+                value={totalFormatted}
+                className="font-mono text-xl font-bold tabular-nums text-foreground"
+              />
+            </div>
+            {/* Comisión */}
+            <div className="flex justify-between items-baseline border-b-4 border-double border-foreground/30 py-2">
+              <span className="font-sans text-sm font-semibold text-foreground tracking-wide">
+                Comisión ({pct}%)
+              </span>
+              <FlashValue
+                value={comisionFormatted}
+                className="font-mono text-2xl font-bold tabular-nums text-primary"
+              />
+            </div>
           </div>
 
           {!isPrintMode && (
-            <div className="flex gap-3 mt-4 no-print max-w-[800px] mx-auto">
+            <div className="flex gap-3 mt-4 no-print max-w-md mx-auto">
               <button
                 onClick={handleSave}
                 disabled={!locked}
