@@ -286,7 +286,7 @@ export default function Calculator() {
                     type="text"
                     value={cheque}
                     onChange={(e) => setCheque(e.target.value)}
-                    className="w-full px-3 py-2 font-mono text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
+                    className="w-full px-3 py-2 font-sans text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
                     onKeyDown={(e) => handleKeyDown(e, montoRef)}
                   />
                 </div>
