@@ -26,10 +26,13 @@ function FlashValue({ value, className }: { value: string; className?: string })
 
 export default function Calculator() {
   const navigate = useNavigate();
-  const [vendedor, setVendedor] = useState("");
+  const defaultVendor = getDefaultVendor();
+  const [vendedor, setVendedor] = useState(defaultVendor);
   const [porcentaje, setPorcentaje] = useState("");
   const [facturas, setFacturas] = useState<Invoice[]>([]);
   const [isPrintMode, setIsPrintMode] = useState(false);
+  const [showSavedDialog, setShowSavedDialog] = useState(false);
+  const [savedSettlement, setSavedSettlement] = useState<Settlement | null>(null);
 
   const [vendors, setVendors] = useState<string[]>(getVendors);
   const [clients, setClients] = useState<string[]>(getClients);
