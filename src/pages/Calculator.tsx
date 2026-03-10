@@ -55,7 +55,7 @@ export default function Calculator() {
   const locked = vendedor.trim() !== "" && porcentaje.trim() !== "" && facturas.length > 0;
 
   const addInvoice = useCallback(() => {
-    const montoNum = parseFloat(monto);
+    const montoNum = parseFloat(monto.replace(/,/g, ""));
     if (!cliente.trim() || !factura.trim() || isNaN(montoNum) || montoNum <= 0) return;
 
     const newInvoice: Invoice = {
