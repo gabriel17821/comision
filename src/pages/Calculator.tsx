@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Invoice, Settlement, saveSettlement, formatMoney, getVendors, saveVendor, getClients, saveClient } from "@/lib/settlements";
+import { Invoice, Settlement, saveSettlement, formatMoney, getVendors, saveVendor, getClients, saveClient, getDefaultVendor } from "@/lib/settlements";
 import { useNavigate } from "react-router-dom";
 import InlineCombobox from "@/components/InlineCombobox";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 function FlashValue({ value, className }: { value: string; className?: string }) {
   const [flash, setFlash] = useState(false);
