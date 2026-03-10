@@ -55,7 +55,7 @@ export default function Calculator() {
   const locked = vendedor.trim() !== "" && porcentaje.trim() !== "" && facturas.length > 0;
 
   const addInvoice = useCallback(() => {
-    const montoNum = parseFloat(monto);
+    const montoNum = parseFloat(monto.replace(/,/g, ""));
     if (!cliente.trim() || !factura.trim() || isNaN(montoNum) || montoNum <= 0) return;
 
     const newInvoice: Invoice = {
@@ -273,7 +273,7 @@ export default function Calculator() {
                     type="text"
                     value={factura}
                     onChange={(e) => setFactura(e.target.value)}
-                    className="w-full px-3 py-2 font-mono text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
+                    className="w-full px-3 py-2 font-sans text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
                     onKeyDown={(e) => handleKeyDown(e, chequeRef)}
                   />
                 </div>
@@ -286,7 +286,7 @@ export default function Calculator() {
                     type="text"
                     value={cheque}
                     onChange={(e) => setCheque(e.target.value)}
-                    className="w-full px-3 py-2 font-mono text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
+                    className="w-full px-3 py-2 font-sans text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
                     onKeyDown={(e) => handleKeyDown(e, montoRef)}
                   />
                 </div>
@@ -296,12 +296,30 @@ export default function Calculator() {
                   </label>
                   <input
                     ref={montoRef}
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={monto}
-                    onChange={(e) => setMonto(e.target.value)}
-                    className="w-full px-3 py-2 font-mono text-sm bg-background border border-border text-right rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
+                    onChange={(e) => {
+                      // Allow digits, commas, and one dot
+                      const raw = e.target.value.replace(/[^0-9.]/g, "");
+                      if (raw === "" || /^\d*\.?\d{0,2}$/.test(raw)) {
+                        setMonto(raw);
+                      }
+                    }}
+                    onBlur={() => {
+                      // Format with commas on blur
+                      const num = parseFloat(monto);
+                      if (!isNaN(num) && num > 0) {
+                        setMonto(num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+                      }
+                    }}
+                    onFocus={() => {
+                      // Remove commas on focus for editing
+                      setMonto(monto.replace(/,/g, ""));
+                    }}
+                    className="w-full px-3 py-2 font-sans text-sm bg-background border border-border text-right rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
                     onKeyDown={(e) => handleKeyDown(e)}
-                    step="0.01"
+                    placeholder="0.00"
                   />
                 </div>
                 <button
