@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   getVendors, saveVendor, deleteVendor,
   getClients, saveClient, deleteClient,
+  getDefaultVendor, setDefaultVendor,
 } from "@/lib/settlements";
 
 export default function Settings() {
@@ -11,6 +12,7 @@ export default function Settings() {
   const [clients, setClients] = useState<string[]>(getClients);
   const [newVendor, setNewVendor] = useState("");
   const [newClient, setNewClient] = useState("");
+  const [defaultVendor, setDefaultVendorState] = useState(getDefaultVendor);
 
   const addVendor = () => {
     if (!newVendor.trim()) return;
@@ -21,7 +23,17 @@ export default function Settings() {
 
   const removeVendor = (name: string) => {
     deleteVendor(name);
+    if (defaultVendor === name) {
+      setDefaultVendor("");
+      setDefaultVendorState("");
+    }
     setVendors(getVendors());
+  };
+
+  const handleSetDefault = (name: string) => {
+    const newDefault = defaultVendor === name ? "" : name;
+    setDefaultVendor(newDefault);
+    setDefaultVendorState(newDefault);
   };
 
   const addClient = () => {
@@ -79,7 +91,20 @@ export default function Settings() {
               <ul className="space-y-1">
                 {vendors.map((v) => (
                   <li key={v} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-secondary transition-colors">
-                    <span className="text-sm font-sans">{v}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleSetDefault(v)}
+                        className={`text-xs px-2 py-0.5 rounded-full font-sans font-medium transition-colors ${
+                          defaultVendor === v
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                        }`}
+                        title={defaultVendor === v ? "Quitar como predeterminado" : "Marcar como predeterminado"}
+                      >
+                        {defaultVendor === v ? "★ Default" : "☆"}
+                      </button>
+                      <span className="text-sm font-sans">{v}</span>
+                    </div>
                     <button
                       onClick={() => removeVendor(v)}
                       className="text-xs text-muted-foreground hover:text-destructive transition-colors font-sans"
