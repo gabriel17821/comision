@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Invoice, Settlement, saveSettlement, formatMoney, getVendors, saveVendor, getClients, saveClient } from "@/lib/settlements";
+import { Invoice, Settlement, saveSettlement, formatMoney, getVendors, saveVendor, getClients, saveClient, getDefaultVendor } from "@/lib/settlements";
 import { useNavigate } from "react-router-dom";
 import InlineCombobox from "@/components/InlineCombobox";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 function FlashValue({ value, className }: { value: string; className?: string }) {
   const [flash, setFlash] = useState(false);
@@ -25,10 +26,13 @@ function FlashValue({ value, className }: { value: string; className?: string })
 
 export default function Calculator() {
   const navigate = useNavigate();
-  const [vendedor, setVendedor] = useState("");
+  const defaultVendor = getDefaultVendor();
+  const [vendedor, setVendedor] = useState(defaultVendor);
   const [porcentaje, setPorcentaje] = useState("");
   const [facturas, setFacturas] = useState<Invoice[]>([]);
   const [isPrintMode, setIsPrintMode] = useState(false);
+  const [showSavedDialog, setShowSavedDialog] = useState(false);
+  const [savedSettlement, setSavedSettlement] = useState<Settlement | null>(null);
 
   const [vendors, setVendors] = useState<string[]>(getVendors);
   const [clients, setClients] = useState<string[]>(getClients);
@@ -110,10 +114,11 @@ export default function Calculator() {
     };
 
     saveSettlement(settlement);
-    setVendedor("");
+    setSavedSettlement(settlement);
+    setShowSavedDialog(true);
+    setVendedor(getDefaultVendor());
     setPorcentaje("");
     setFacturas([]);
-    navigate("/historial");
   };
 
   const totalFormatted = `$${formatMoney(totalVendido)}`;
@@ -317,30 +322,32 @@ export default function Calculator() {
         </div>
       </div>
 
-      {/* Footer Totals — sticky */}
-      <footer className="border-t border-border px-4 py-4 bg-card shadow-[0_-2px_8px_rgba(0,0,0,0.04)] sticky bottom-0 z-10">
-        <div className="mx-auto w-full max-w-[800px]">
-          <div className="flex justify-between items-baseline mb-2">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium">
+      {/* Footer Totals — estilo cuaderno de colegio */}
+      <footer className="border-t-2 border-foreground/30 bg-background sticky bottom-0 z-10">
+        <div className="w-full px-6 py-5">
+          {/* Total Vendido */}
+          <div className="flex justify-between items-baseline border-b border-foreground/15 py-3 px-2">
+            <span className="font-sans text-base font-medium text-foreground tracking-wide">
               Total Vendido
             </span>
             <FlashValue
               value={totalFormatted}
-              className="font-mono text-xl font-bold tabular-nums"
+              className="font-mono text-2xl font-bold tabular-nums text-foreground"
             />
           </div>
-          <div className="flex justify-between items-baseline">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium">
+          {/* Línea doble para comisión */}
+          <div className="flex justify-between items-baseline border-b-4 border-double border-foreground/30 py-3 px-2">
+            <span className="font-sans text-base font-semibold text-foreground tracking-wide">
               Comisión a Pagar ({pct}%)
             </span>
             <FlashValue
               value={comisionFormatted}
-              className="font-mono text-2xl font-bold tabular-nums text-primary"
+              className="font-mono text-3xl font-bold tabular-nums text-primary"
             />
           </div>
 
           {!isPrintMode && (
-            <div className="flex gap-3 mt-4 no-print">
+            <div className="flex gap-3 mt-4 no-print max-w-[800px] mx-auto">
               <button
                 onClick={handleSave}
                 disabled={!locked}
@@ -359,6 +366,44 @@ export default function Calculator() {
           )}
         </div>
       </footer>
+
+      {/* Dialog de guardado exitoso */}
+      <Dialog open={showSavedDialog} onOpenChange={setShowSavedDialog}>
+        <DialogContent className="sm:max-w-md text-center">
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center animate-in zoom-in-50 duration-300">
+              <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-sans font-semibold text-foreground">¡Liquidación Guardada!</h2>
+            <p className="text-sm text-muted-foreground font-sans">
+              {savedSettlement?.vendedor} — {savedSettlement ? `$${formatMoney(savedSettlement.comision)}` : ""}
+            </p>
+            <div className="flex gap-3 w-full mt-2">
+              <button
+                onClick={() => setShowSavedDialog(false)}
+                className="flex-1 px-4 py-3 border border-border font-sans text-sm font-medium hover:bg-secondary transition-colors rounded-md"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => {
+                  setShowSavedDialog(false);
+                  // Re-load settlement for print
+                  setVendedor(savedSettlement?.vendedor || "");
+                  setPorcentaje(String(savedSettlement?.porcentaje || ""));
+                  setFacturas(savedSettlement?.facturas || []);
+                  setTimeout(() => handlePrint(), 100);
+                }}
+                className="flex-1 px-4 py-3 bg-primary text-primary-foreground font-sans text-sm font-medium hover:bg-primary/90 transition-colors rounded-md shadow-sm"
+              >
+                🖨 Imprimir
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

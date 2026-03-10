@@ -16,6 +16,15 @@ export interface Settlement {
   fecha: string;
 }
 
+// --- Default Vendor ---
+export function getDefaultVendor(): string {
+  return localStorage.getItem("vendedor_default") || "";
+}
+
+export function setDefaultVendor(name: string) {
+  localStorage.setItem("vendedor_default", name);
+}
+
 // --- Vendors ---
 export function getVendors(): string[] {
   const data = localStorage.getItem("vendedores");
