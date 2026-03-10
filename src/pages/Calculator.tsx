@@ -114,10 +114,11 @@ export default function Calculator() {
     };
 
     saveSettlement(settlement);
-    setVendedor("");
+    setSavedSettlement(settlement);
+    setShowSavedDialog(true);
+    setVendedor(getDefaultVendor());
     setPorcentaje("");
     setFacturas([]);
-    navigate("/historial");
   };
 
   const totalFormatted = `$${formatMoney(totalVendido)}`;
