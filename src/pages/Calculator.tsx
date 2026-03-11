@@ -3,6 +3,9 @@ import { Invoice, Settlement, saveSettlement, formatMoney, getVendors, saveVendo
 import { useNavigate } from "react-router-dom";
 import InlineCombobox from "@/components/InlineCombobox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Trash2, UserPlus, FileText, CheckCircle2, Calculator as CalcIcon, Printer, Save, Pencil } from "lucide-react";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { generateSettlementPDF } from "@/lib/pdfGenerator";
 
 function FlashValue({ value, className }: { value: string; className?: string }) {
   const [flash, setFlash] = useState(false);
@@ -18,7 +21,7 @@ function FlashValue({ value, className }: { value: string; className?: string })
   }, [value]);
 
   return (
-    <span className={`${className} inline-block transition-all duration-150 ${flash ? "bg-primary/15 rounded px-1 -mx-1 scale-105" : ""}`}>
+    <span className={`${className} inline-block transition-all duration-150 ${flash ? "bg-primary/10 rounded px-1 -mx-1 scale-[1.02]" : ""}`}>
       {value}
     </span>
   );
@@ -27,15 +30,41 @@ function FlashValue({ value, className }: { value: string; className?: string })
 export default function Calculator() {
   const navigate = useNavigate();
   const defaultVendor = getDefaultVendor();
-  const [vendedor, setVendedor] = useState(defaultVendor);
-  const [porcentaje, setPorcentaje] = useState("");
-  const [facturas, setFacturas] = useState<Invoice[]>([]);
-  const [isPrintMode, setIsPrintMode] = useState(false);
+
+  const [vendedor, setVendedor] = useState(() => {
+    const saved = localStorage.getItem("calc_vendedor");
+    return saved !== null ? saved : defaultVendor;
+  });
+  const [porcentaje, setPorcentaje] = useState(() => {
+    return localStorage.getItem("calc_porcentaje") || "";
+  });
+  const [facturas, setFacturas] = useState<Invoice[]>(() => {
+    const saved = localStorage.getItem("calc_facturas");
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { return []; }
+    }
+    return [];
+  });
+
   const [showSavedDialog, setShowSavedDialog] = useState(false);
   const [savedSettlement, setSavedSettlement] = useState<Settlement | null>(null);
 
-  const [vendors, setVendors] = useState<string[]>(getVendors);
-  const [clients, setClients] = useState<string[]>(getClients);
+  const [vendors, setVendors] = useState<string[]>([]);
+  const [clients, setClients] = useState<string[]>([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setVendors(await getVendors());
+      setClients(await getClients());
+    };
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("calc_vendedor", vendedor);
+    localStorage.setItem("calc_porcentaje", porcentaje);
+    localStorage.setItem("calc_facturas", JSON.stringify(facturas));
+  }, [vendedor, porcentaje, facturas]);
 
   const clienteRef = useRef<HTMLInputElement>(null);
   const facturaRef = useRef<HTMLInputElement>(null);
@@ -72,8 +101,11 @@ export default function Calculator() {
     setCheque("");
     setMonto("");
     clienteRef.current?.focus();
-    // Scroll down after adding
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }), 50);
+
+    // Auto-scroll to bottom after state update
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
   }, [cliente, factura, cheque, monto]);
 
   const removeInvoice = (id: string) => {
@@ -91,16 +123,15 @@ export default function Calculator() {
     }
   };
 
-  const handlePrint = () => {
-    if (!vendedor.trim() || facturas.length === 0) return;
-    setIsPrintMode(true);
-    setTimeout(() => {
-      window.print();
-      setIsPrintMode(false);
-    }, 250);
+  const editInvoice = (f: Invoice) => {
+    setCliente(f.cliente);
+    setFactura(f.factura);
+    setCheque(f.cheque || "");
+    setMonto(String(f.monto));
+    removeInvoice(f.id);
   };
 
-  const handleSave = () => {
+  const handleSaveAndPrint = async () => {
     if (!vendedor.trim() || facturas.length === 0) return;
 
     const settlement: Settlement = {
@@ -113,317 +144,409 @@ export default function Calculator() {
       fecha: new Date().toISOString(),
     };
 
-    saveSettlement(settlement);
+    await saveSettlement(settlement);
     setSavedSettlement(settlement);
     setShowSavedDialog(true);
+
+    try {
+      await generateSettlementPDF(settlement);
+    } catch (e) {
+      console.error("Error generating PDF:", e);
+    }
+
+    setVendedor(getDefaultVendor());
+    setPorcentaje("");
+    setFacturas([]);
+    localStorage.removeItem("calc_vendedor");
+    localStorage.removeItem("calc_porcentaje");
+    localStorage.removeItem("calc_facturas");
+  };
+
+  const printSavedSettlement = async () => {
+    if (!savedSettlement) return;
+
+    try {
+      await generateSettlementPDF(savedSettlement);
+    } catch (e) {
+      console.error("Error generating PDF:", e);
+    }
+
+    // Clean up after print dialog closes
     setVendedor(getDefaultVendor());
     setPorcentaje("");
     setFacturas([]);
   };
 
+
+
   const totalFormatted = `$${formatMoney(totalVendido)}`;
   const comisionFormatted = `$${formatMoney(comision)}`;
 
   return (
-    <div className={`min-h-screen flex flex-col transition-all duration-200 ${isPrintMode ? "print-active" : ""}`}>
+    <div className={`min-h-screen bg-muted/20 flex flex-col transition-all duration-200 pb-8`}>
       {/* Header */}
-      <header className="bg-card border-b border-border px-4 py-0 sticky top-0 z-10">
-        <div className="mx-auto w-full max-w-[800px] flex items-center h-14 gap-4">
-          <h1 className="text-base font-sans font-semibold text-foreground">
-            Liquidación de Comisiones
-          </h1>
+      <header className="bg-white border-b border-border px-4 py-0 sticky top-0 z-20 shadow-sm no-print">
+        <div className="mx-auto w-full max-w-[800px] flex items-center h-16 gap-4">
+          <div className="flex items-center gap-2">
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <CalcIcon className="w-5 h-5 text-primary" />
+            </div>
+            <h1 className="text-lg font-sans font-bold tracking-tight text-foreground">
+              Liquidación de Comisiones
+            </h1>
+          </div>
           <div className="flex-1" />
           <button
             onClick={() => navigate("/historial")}
-            className="px-4 py-2 text-sm font-sans font-medium bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/70 transition-colors no-print"
+            className="px-4 py-2 text-sm font-sans font-medium bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/70 transition-colors"
           >
             Historial
           </button>
           <button
             onClick={() => navigate("/configuracion")}
-            className="px-4 py-2 text-sm font-sans font-medium bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/70 transition-colors no-print"
+            className="px-4 py-2 text-sm font-sans font-medium bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/70 transition-colors"
           >
             ⚙ Config
           </button>
         </div>
       </header>
 
-      {/* Vendor / Commission — separate section */}
-      {!isPrintMode ? (
-        <div className="border-b-2 border-primary/20 px-4 py-5 bg-card">
-          <div className="mx-auto w-full max-w-[800px]">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-sans font-semibold mb-3">Datos del Vendedor</p>
+      {/* Main Container - Single Column Layout 800px */}
+      <main className="flex-1 w-full max-w-[800px] mx-auto p-4 md:p-6 flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
+
+        {/* Vendedor & Comisión */}
+        <Card className="shadow-sm border-border bg-white">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-muted-foreground" />
+              Datos del Vendedor
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="grid grid-cols-[1fr_140px] gap-4">
               <div>
-                <label className="block text-xs uppercase tracking-wide text-muted-foreground mb-1.5 font-sans font-medium">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
                   Vendedor
                 </label>
                 <InlineCombobox
                   items={vendors}
                   value={vendedor}
                   onChange={setVendedor}
-                  onCreateNew={(v) => { saveVendor(v); setVendors(getVendors()); }}
-                  placeholder="Seleccionar o crear vendedor"
-                  className="w-full px-3 py-2 font-sans text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
+                  onCreateNew={async (v) => { await saveVendor(v); setVendors(await getVendors()); }}
+                  placeholder="Seleccionar o crear"
+                  className="w-full px-3 py-2 font-sans text-sm bg-background border border-input rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow"
                   onKeyDown={(e) => handleKeyDown(e, clienteRef)}
                 />
               </div>
               <div>
-                <label className="block text-xs uppercase tracking-wide text-muted-foreground mb-1.5 font-sans font-medium">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
                   Comisión %
                 </label>
-                <input
-                  type="number"
-                  value={porcentaje}
-                  onChange={(e) => setPorcentaje(e.target.value)}
-                  className="w-full px-3 py-2 font-mono text-sm bg-background border border-border text-right rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
-                  onKeyDown={(e) => handleKeyDown(e, clienteRef)}
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={porcentaje}
+                    placeholder="0.00"
+                    onChange={(e) => setPorcentaje(e.target.value)}
+                    className="w-full pl-3 pr-8 py-2 font-mono text-sm bg-background border border-input rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow text-right"
+                    onKeyDown={(e) => handleKeyDown(e, clienteRef)}
+                  />
+                  <span className="absolute right-3 top-2 text-muted-foreground font-mono text-sm">%</span>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      ) : (
-        <div className="px-4 py-6">
-          <div className="mx-auto w-full max-w-[800px]">
-            <p className="font-sans text-2xl font-bold">{vendedor}</p>
-            <p className="font-mono text-base text-muted-foreground mt-1">Comisión: {pct}%</p>
-            <p className="text-xs text-muted-foreground mt-2 font-sans">
-              {new Date().toLocaleDateString("es-MX", { year: "numeric", month: "long", day: "numeric" })}
-            </p>
-          </div>
-        </div>
-      )}
+          </CardContent>
+        </Card>
 
-      {/* Scrollable content: Table + Input row at bottom */}
-      <div className="flex-1 overflow-auto px-4 py-4">
-        <div className="mx-auto w-full max-w-[800px]">
-          {/* Invoice Table */}
-          {facturas.length > 0 && (
-            <table className="w-full border-collapse mb-4">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-2.5 pr-4">
-                    Cliente
-                  </th>
-                  <th className="text-left text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-2.5 pr-4">
-                    Factura
-                  </th>
-                  <th className="text-left text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-2.5 pr-4">
-                    Cheque
-                  </th>
-                  <th className="text-right text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-2.5">
-                    Monto
-                  </th>
-                  {!isPrintMode && <th className="w-10"></th>}
+        {/* Unified Invoice Data Entry & List */}
+        <Card className="shadow-sm border-border border-t-4 border-t-primary bg-white relative z-10 mb-4 lg:mb-0">
+          <CardContent className="p-0">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-muted-foreground border-b border-border/50">
+                <tr>
+                  <th className="font-semibold text-left py-2.5 px-4 text-[11px] uppercase tracking-wider">Cliente</th>
+                  <th className="font-semibold text-left py-2.5 px-4 text-[11px] uppercase tracking-wider w-[120px]">Factura</th>
+                  <th className="font-semibold text-left py-2.5 px-4 text-[11px] uppercase tracking-wider w-[120px]">Cheque</th>
+                  <th className="font-semibold text-right py-2.5 px-4 text-[11px] uppercase tracking-wider w-[140px]">Monto</th>
+                  <th className="w-[100px] text-center py-2.5 px-4"></th>
                 </tr>
               </thead>
-              <tbody>
-                {facturas.map((f) => (
-                  <tr key={f.id} className="border-b border-border animate-row-enter">
-                    <td className="py-2.5 pr-4 font-sans text-sm">{f.cliente}</td>
-                    <td className="py-2.5 pr-4 font-mono text-sm">{f.factura}</td>
-                    <td className="py-2.5 pr-4 font-mono text-sm">{f.cheque || "—"}</td>
-                    <td className="py-2.5 text-right font-mono text-sm tabular-nums">
-                      ${formatMoney(f.monto)}
+              <tbody className="divide-y divide-border/30 bg-white">
+
+
+                {/* Persistent Input Row (Top if empty) */}
+                {facturas.length === 0 && (
+                  <tr className="bg-primary/5 hover:bg-primary/5 transition-colors group">
+                    <td className="p-2 align-top">
+                      <InlineCombobox
+                        items={clients}
+                        value={cliente}
+                        onChange={setCliente}
+                        onCreateNew={async (c) => { await saveClient(c); setClients(await getClients()); }}
+                        placeholder="Seleccionar..."
+                        inputRef={clienteRef}
+                        className="w-full px-3 py-2 font-sans text-sm bg-white border border-input rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none shadow-sm"
+                        onKeyDown={(e) => handleKeyDown(e, facturaRef)}
+                      />
                     </td>
-                    {!isPrintMode && (
-                      <td className="py-2.5 text-right no-print">
-                        <button
-                          onClick={() => removeInvoice(f.id)}
-                          className="text-muted-foreground hover:text-destructive text-xs transition-colors"
-                          title="Eliminar"
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    )}
+                    <td className="p-2 align-top">
+                      <input
+                        ref={facturaRef}
+                        type="text"
+                        value={factura}
+                        onChange={(e) => setFactura(e.target.value)}
+                        placeholder="Factura"
+                        className="w-full px-3 py-2 font-sans text-sm bg-white border border-input rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none shadow-sm"
+                        onKeyDown={(e) => handleKeyDown(e, chequeRef)}
+                      />
+                    </td>
+                    <td className="p-2 align-top">
+                      <input
+                        ref={chequeRef}
+                        type="text"
+                        value={cheque}
+                        onChange={(e) => setCheque(e.target.value)}
+                        placeholder="Cheque"
+                        className="w-full px-3 py-2 font-sans text-sm bg-white border border-input rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none shadow-sm"
+                        onKeyDown={(e) => handleKeyDown(e, montoRef)}
+                      />
+                    </td>
+                    <td className="p-2 align-top">
+                      <input
+                        ref={montoRef}
+                        type="text"
+                        inputMode="decimal"
+                        value={monto}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9.]/g, "");
+                          if (raw === "" || /^\d*\.?\d{0,2}$/.test(raw)) {
+                            setMonto(raw);
+                          }
+                        }}
+                        onBlur={() => {
+                          const num = parseFloat(monto);
+                          if (!isNaN(num) && num > 0) {
+                            setMonto(num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+                          }
+                        }}
+                        onFocus={() => {
+                          setMonto(monto.replace(/,/g, ""));
+                        }}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 font-mono text-sm bg-white border border-input text-right rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none shadow-sm"
+                        onKeyDown={(e) => handleKeyDown(e)}
+                      />
+                    </td>
+                    <td className="p-2 align-top text-center">
+                      <button
+                        onClick={addInvoice}
+                        className="w-full h-9 bg-primary text-primary-foreground font-sans text-[13px] font-semibold tracking-wide hover:bg-primary/90 transition-colors rounded-md shadow-sm flex items-center justify-center gap-1"
+                      >
+                        Agregar
+                      </button>
+                    </td>
                   </tr>
-                ))}
+                )}
+
+                {/* Historical Invoices */}
+                {facturas.length > 0 ? (
+                  facturas.map((f) => (
+                    <tr key={f.id} className="hover:bg-muted/10 transition-colors">
+                      <td className="py-3 px-4 font-medium">{f.cliente}</td>
+                      <td className="py-3 px-4 text-slate-700 max-w-[120px] truncate">{f.factura}</td>
+                      <td className="py-3 px-4 text-slate-700 max-w-[120px] truncate">{f.cheque || "—"}</td>
+                      <td className="py-3 px-4 text-right font-medium text-slate-900 tabular-nums">
+                        ${formatMoney(f.monto)}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex justify-center items-center gap-1">
+                          <button
+                            onClick={() => editInvoice(f)}
+                            className="text-muted-foreground/50 hover:text-primary hover:bg-primary/10 p-1.5 rounded transition-colors inline-block"
+                            title="Editar factura"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => removeInvoice(f.id)}
+                            className="text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 p-1.5 rounded transition-colors inline-block"
+                            title="Eliminar factura"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-muted-foreground border-b-0">
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 border border-dashed border-slate-200">
+                          <FileText className="w-8 h-8 text-slate-300" />
+                        </div>
+                        <p className="text-[15px] font-medium text-slate-500">Aún no hay facturas</p>
+                        <p className="text-sm text-slate-400 mt-1">Usa la fila de arriba para agregar la primera factura.</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+
+                {/* Persistent Input Row (Bottom when items exist) */}
+                {facturas.length > 0 && (
+                  <tr className="bg-primary/5 hover:bg-primary/5 transition-colors group">
+                    <td className="p-2 align-top border-t border-border/50">
+                      <InlineCombobox
+                        items={clients}
+                        value={cliente}
+                        onChange={setCliente}
+                        onCreateNew={async (c) => { await saveClient(c); setClients(await getClients()); }}
+                        placeholder="Seleccionar..."
+                        inputRef={clienteRef}
+                        className="w-full px-3 py-2 font-sans text-sm bg-white border border-input rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none shadow-sm"
+                        onKeyDown={(e) => handleKeyDown(e, facturaRef)}
+                      />
+                    </td>
+                    <td className="p-2 align-top border-t border-border/50">
+                      <input
+                        ref={facturaRef}
+                        type="text"
+                        value={factura}
+                        onChange={(e) => setFactura(e.target.value)}
+                        placeholder="Factura"
+                        className="w-full px-3 py-2 font-sans text-sm bg-white border border-input rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none shadow-sm"
+                        onKeyDown={(e) => handleKeyDown(e, chequeRef)}
+                      />
+                    </td>
+                    <td className="p-2 align-top border-t border-border/50">
+                      <input
+                        ref={chequeRef}
+                        type="text"
+                        value={cheque}
+                        onChange={(e) => setCheque(e.target.value)}
+                        placeholder="Cheque"
+                        className="w-full px-3 py-2 font-sans text-sm bg-white border border-input rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none shadow-sm"
+                        onKeyDown={(e) => handleKeyDown(e, montoRef)}
+                      />
+                    </td>
+                    <td className="p-2 align-top border-t border-border/50">
+                      <input
+                        ref={montoRef}
+                        type="text"
+                        inputMode="decimal"
+                        value={monto}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9.]/g, "");
+                          if (raw === "" || /^\d*\.?\d{0,2}$/.test(raw)) {
+                            setMonto(raw);
+                          }
+                        }}
+                        onBlur={() => {
+                          const num = parseFloat(monto);
+                          if (!isNaN(num) && num > 0) {
+                            setMonto(num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
+                          }
+                        }}
+                        onFocus={() => {
+                          setMonto(monto.replace(/,/g, ""));
+                        }}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 font-mono text-sm bg-white border border-input text-right rounded-md focus:border-primary focus:ring-1 focus:ring-primary outline-none shadow-sm"
+                        onKeyDown={(e) => handleKeyDown(e)}
+                      />
+                    </td>
+                    <td className="p-2 align-top text-center border-t border-border/50">
+                      <button
+                        onClick={addInvoice}
+                        className="w-full h-9 bg-primary text-primary-foreground font-sans text-[13px] font-semibold tracking-wide hover:bg-primary/90 transition-colors rounded-md shadow-sm flex items-center justify-center gap-1"
+                      >
+                        Agregar
+                      </button>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
-          )}
+            <div ref={bottomRef} className="h-4" />
+          </CardContent>
+        </Card>
 
-          {/* Input Row — BELOW the table, scrolls down with content */}
-          {!isPrintMode && (
-            <div className="border border-border rounded-md px-4 py-4 bg-secondary/20 no-print" ref={bottomRef}>
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-sans font-semibold mb-3">Agregar Factura</p>
-              <div className="grid grid-cols-[1fr_100px_100px_120px_auto] gap-3 items-end">
-                <div>
-                  <label className="block text-xs uppercase tracking-wide text-muted-foreground mb-1.5 font-sans font-medium">
-                    Cliente
-                  </label>
-                  <InlineCombobox
-                    items={clients}
-                    value={cliente}
-                    onChange={setCliente}
-                    onCreateNew={(c) => { saveClient(c); setClients(getClients()); }}
-                    placeholder="Seleccionar o crear"
-                    inputRef={clienteRef}
-                    className="w-full px-3 py-2 font-sans text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
-                    onKeyDown={(e) => handleKeyDown(e, facturaRef)}
-                  />
+        {/* Totals & Footer Card */}
+        <Card className="shadow-sm border-border bg-white mt-4 border-t-2 border-t-muted">
+          <CardContent className="p-4 sm:p-6">
+            <div className="mx-auto max-w-md">
+              <div className="flex justify-between items-baseline border-b border-border/60 py-2">
+                <span className="font-sans text-sm font-semibold text-muted-foreground tracking-wide uppercase">
+                  Total Vendido
+                </span>
+                <FlashValue
+                  value={totalFormatted}
+                  className="font-sans text-xl font-semibold tabular-nums text-foreground"
+                />
+              </div>
+              <div className="flex justify-between items-baseline border-b-4 border-double border-border/60 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-sans text-sm font-bold text-foreground tracking-wide uppercase">
+                    Comisión
+                  </span>
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-green-100 text-green-800">
+                    {pct}%
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-wide text-muted-foreground mb-1.5 font-sans font-medium">
-                    Factura
-                  </label>
-                  <input
-                    ref={facturaRef}
-                    type="text"
-                    value={factura}
-                    onChange={(e) => setFactura(e.target.value)}
-                    className="w-full px-3 py-2 font-sans text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
-                    onKeyDown={(e) => handleKeyDown(e, chequeRef)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-wide text-muted-foreground mb-1.5 font-sans font-medium">
-                    Cheque
-                  </label>
-                  <input
-                    ref={chequeRef}
-                    type="text"
-                    value={cheque}
-                    onChange={(e) => setCheque(e.target.value)}
-                    className="w-full px-3 py-2 font-sans text-sm bg-background border border-border rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
-                    onKeyDown={(e) => handleKeyDown(e, montoRef)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-wide text-muted-foreground mb-1.5 font-sans font-medium">
-                    Monto
-                  </label>
-                  <input
-                    ref={montoRef}
-                    type="text"
-                    inputMode="decimal"
-                    value={monto}
-                    onChange={(e) => {
-                      // Allow digits, commas, and one dot
-                      const raw = e.target.value.replace(/[^0-9.]/g, "");
-                      if (raw === "" || /^\d*\.?\d{0,2}$/.test(raw)) {
-                        setMonto(raw);
-                      }
-                    }}
-                    onBlur={() => {
-                      // Format with commas on blur
-                      const num = parseFloat(monto);
-                      if (!isNaN(num) && num > 0) {
-                        setMonto(num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }));
-                      }
-                    }}
-                    onFocus={() => {
-                      // Remove commas on focus for editing
-                      setMonto(monto.replace(/,/g, ""));
-                    }}
-                    className="w-full px-3 py-2 font-sans text-sm bg-background border border-border text-right rounded-md focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary))]"
-                    onKeyDown={(e) => handleKeyDown(e)}
-                    placeholder="0.00"
-                  />
-                </div>
+                <FlashValue
+                  value={comisionFormatted}
+                  className="font-sans text-2xl font-bold tabular-nums text-green-600"
+                />
+              </div>
+              <div className="flex gap-3 mt-5">
                 <button
-                  onClick={addInvoice}
-                  className="px-5 py-2 bg-primary text-primary-foreground font-sans text-sm font-medium hover:bg-primary/90 transition-colors rounded-md shadow-sm"
+                  onClick={handleSaveAndPrint}
+                  disabled={!locked}
+                  className="w-full py-3 bg-primary text-primary-foreground font-sans text-[15px] font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed rounded-md shadow-sm flex items-center justify-center gap-2"
                 >
-                  Agregar
+                  <Printer className="w-4 h-4" />
+                  Guardar e Imprimir
                 </button>
               </div>
             </div>
-          )}
+          </CardContent>
+        </Card>
+      </main>
 
-          {facturas.length === 0 && !isPrintMode && (
-            <div className="text-center py-10 text-muted-foreground">
-              <p className="text-sm font-sans font-medium">Agrega facturas usando el formulario de arriba</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Footer Totals — centrado, compacto */}
-      <footer className="border-t-2 border-foreground/30 bg-card sticky bottom-0 z-10 px-4 py-4">
-        <div className="mx-auto w-full max-w-[800px]">
-          <div className="mx-auto max-w-md">
-            {/* Total Vendido */}
-            <div className="flex justify-between items-baseline border-b border-foreground/15 py-2">
-              <span className="font-sans text-sm font-medium text-foreground tracking-wide">
-                Total Vendido
-              </span>
-              <FlashValue
-                value={totalFormatted}
-                className="font-mono text-xl font-bold tabular-nums text-foreground"
-              />
-            </div>
-            {/* Comisión */}
-            <div className="flex justify-between items-baseline border-b-4 border-double border-foreground/30 py-2">
-              <span className="font-sans text-sm font-semibold text-foreground tracking-wide">
-                Comisión ({pct}%)
-              </span>
-              <FlashValue
-                value={comisionFormatted}
-                className="font-mono text-2xl font-bold tabular-nums text-primary"
-              />
-            </div>
-          </div>
-
-          {!isPrintMode && (
-            <div className="flex gap-3 mt-4 no-print max-w-md mx-auto">
-              <button
-                onClick={handleSave}
-                disabled={!locked}
-                className="flex-1 px-4 py-3 bg-primary text-primary-foreground font-sans text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-30 rounded-md shadow-sm"
-              >
-                Guardar Liquidación
-              </button>
-              <button
-                onClick={handlePrint}
-                disabled={facturas.length === 0 || !vendedor.trim()}
-                className="px-4 py-3 border border-border font-sans text-sm font-medium hover:bg-secondary transition-colors disabled:opacity-30 rounded-md"
-              >
-                Imprimir
-              </button>
-            </div>
-          )}
-        </div>
-      </footer>
-
-      {/* Dialog de guardado exitoso */}
+      {/* Success Dialog */}
       <Dialog open={showSavedDialog} onOpenChange={setShowSavedDialog}>
         <DialogContent className="sm:max-w-md text-center">
-          <div className="flex flex-col items-center gap-4 py-4">
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center animate-in zoom-in-50 duration-300">
-              <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
+          <div className="flex flex-col items-center gap-4 py-6 px-4">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center animate-in zoom-in-50 duration-300 delay-150 fill-mode-both">
+              <CheckCircle2 className="w-8 h-8 text-green-600" />
             </div>
-            <h2 className="text-lg font-sans font-semibold text-foreground">¡Liquidación Guardada!</h2>
-            <p className="text-sm text-muted-foreground font-sans">
-              {savedSettlement?.vendedor} — {savedSettlement ? `$${formatMoney(savedSettlement.comision)}` : ""}
-            </p>
-            <div className="flex gap-3 w-full mt-2">
+            <div>
+              <h2 className="text-xl font-bold text-foreground">¡Liquidación Guardada!</h2>
+              <p className="text-sm text-muted-foreground mt-2 max-w-[280px] mx-auto">
+                La comisión de <span className="font-semibold text-foreground">{savedSettlement?.vendedor}</span> por <strong className="text-green-600">${savedSettlement ? formatMoney(savedSettlement.comision) : ""}</strong> ha sido registrada exitosamente en el historial.
+              </p>
+            </div>
+            <div className="flex gap-3 w-full mt-4">
               <button
                 onClick={() => setShowSavedDialog(false)}
-                className="flex-1 px-4 py-3 border border-border font-sans text-sm font-medium hover:bg-secondary transition-colors rounded-md"
+                className="flex-1 px-4 py-2.5 border border-border bg-background hover:bg-secondary transition-colors rounded-md font-medium text-sm"
               >
                 Cerrar
               </button>
               <button
                 onClick={() => {
                   setShowSavedDialog(false);
-                  // Re-load settlement for print
-                  setVendedor(savedSettlement?.vendedor || "");
-                  setPorcentaje(String(savedSettlement?.porcentaje || ""));
-                  setFacturas(savedSettlement?.facturas || []);
-                  setTimeout(() => handlePrint(), 100);
+                  printSavedSettlement();
                 }}
-                className="flex-1 px-4 py-3 bg-primary text-primary-foreground font-sans text-sm font-medium hover:bg-primary/90 transition-colors rounded-md shadow-sm"
+                className="flex-[2] px-4 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors rounded-md font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
               >
-                🖨 Imprimir
+                <Printer className="w-4 h-4" />
+                Imprimir Recibo
               </button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }

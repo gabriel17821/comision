@@ -1,168 +1,162 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSettlements, deleteSettlement, formatMoney, Settlement } from "@/lib/settlements";
+import { generateSettlementPDF, getSettlementPDFUrl } from "@/lib/pdfGenerator";
+import { Loader2 } from "lucide-react";
 
 export default function History() {
   const navigate = useNavigate();
-  const [settlements, setSettlements] = useState<Settlement[]>(getSettlements);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [viewing, setViewing] = useState<Settlement | null>(null);
-  const [isPrintMode, setIsPrintMode] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
 
-  const handleDelete = (id: string) => {
-    deleteSettlement(id);
-    setSettlements(getSettlements());
+  useEffect(() => {
+    const loadData = async () => {
+      setSettlements(await getSettlements());
+    };
+    loadData();
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("¿Seguro que deseas eliminar esta liquidación?")) return;
+    await deleteSettlement(id);
+    setSettlements(await getSettlements());
     if (viewing?.id === id) setViewing(null);
   };
 
-  const handlePrint = (s: Settlement) => {
-    setViewing(s);
-    setIsPrintMode(true);
-    setTimeout(() => {
-      window.print();
-      setIsPrintMode(false);
-    }, 250);
+  const handlePrint = async (s: Settlement) => {
+    await generateSettlementPDF(s);
   };
 
-  if (viewing && isPrintMode) {
-    return (
-      <div className="min-h-screen px-4 py-8">
-        <div className="mx-auto w-full max-w-[800px]">
-          <p className="font-sans text-2xl font-bold">{viewing.vendedor}</p>
-          <p className="font-mono text-base text-muted-foreground mt-1">Comisión: {viewing.porcentaje}%</p>
-          <p className="text-xs text-muted-foreground mt-2 font-sans">
-            {new Date(viewing.fecha).toLocaleDateString("es-MX", { year: "numeric", month: "long", day: "numeric" })}
-          </p>
+  const handleViewDetail = async (s: Settlement) => {
+    if (viewing?.id === s.id) {
+      setViewing(null);
+      setPdfUrl(null);
+    } else {
+      setViewing(s);
+      setIsPdfLoading(true);
+      setPdfUrl(null);
 
-          <table className="w-full border-collapse mt-8">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-2 pr-4">Cliente</th>
-                <th className="text-left text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-2 pr-4">Factura</th>
-                <th className="text-left text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-2 pr-4">Cheque</th>
-                <th className="text-right text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-2">Monto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {viewing.facturas.map((f) => (
-                <tr key={f.id} className="border-b border-border">
-                  <td className="py-2 pr-4 font-sans text-sm">{f.cliente}</td>
-                  <td className="py-2 pr-4 font-mono text-sm">{f.factura}</td>
-                  <td className="py-2 pr-4 font-mono text-sm">{f.cheque || "—"}</td>
-                  <td className="py-2 text-right font-mono text-sm tabular-nums">${formatMoney(f.monto)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      try {
+        const url = await getSettlementPDFUrl(s);
+        setPdfUrl(url);
+      } catch (err) {
+        console.error("Error al generar vista previa:", err);
+      } finally {
+        setIsPdfLoading(false);
+      }
+    }
+  };
 
-          <div className="border-t border-border mt-4 pt-4">
-            <div className="flex justify-between items-baseline mb-2">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium">Total Vendido</span>
-              <span className="font-mono text-xl font-bold tabular-nums">${formatMoney(viewing.totalVendido)}</span>
-            </div>
-            <div className="flex justify-between items-baseline">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium">Comisión a Pagar ({viewing.porcentaje}%)</span>
-              <span className="font-mono text-2xl font-bold tabular-nums text-primary">${formatMoney(viewing.comision)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleEdit = (s: Settlement) => {
+    localStorage.setItem("calc_vendedor", s.vendedor);
+    localStorage.setItem("calc_porcentaje", String(s.porcentaje));
+    localStorage.setItem("calc_facturas", JSON.stringify(s.facturas));
+    deleteSettlement(s.id);
+    navigate("/");
+  };
+
+
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen bg-muted/20 flex flex-col">
       {/* Header */}
-      <header className="bg-card border-b border-border px-4 py-0">
-        <div className="mx-auto w-full max-w-[800px] flex items-center h-14 gap-4">
-          <h1 className="text-base font-sans font-semibold text-foreground">Historial de Liquidaciones</h1>
+      <header className="bg-white border-b border-border px-4 py-0 sticky top-0 z-20 shadow-sm">
+        <div className="mx-auto w-full max-w-[800px] flex items-center h-16 gap-4">
+          <h1 className="text-lg font-sans font-bold tracking-tight text-foreground">
+            Historial
+          </h1>
           <div className="flex-1" />
           <button
             onClick={() => navigate("/")}
-            className="px-4 py-2 text-sm font-sans font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            className="px-4 py-2 text-sm font-sans font-medium bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/70 transition-colors"
           >
-            + Nueva Liquidación
+            ← Volver a Calculadora
           </button>
         </div>
       </header>
 
-      <div className="flex-1 px-4 py-6">
-        <div className="mx-auto w-full max-w-[800px]">
-          {settlements.length === 0 ? (
-            <div className="text-center py-20 text-muted-foreground">
-              <p className="text-sm font-sans font-medium">Sin liquidaciones guardadas</p>
-            </div>
-          ) : (
-            <div className="space-y-0">
-              {settlements.map((s) => (
-                <div key={s.id} className="border-b border-border py-4">
-                  <div className="flex items-baseline justify-between">
-                    <div>
-                      <p className="font-sans text-base font-semibold">{s.vendedor}</p>
-                      <p className="text-xs text-muted-foreground font-sans mt-1">
-                        {new Date(s.fecha).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
-                        {" · "}{s.facturas.length} factura{s.facturas.length !== 1 ? "s" : ""}
-                        {" · "}{s.porcentaje}%
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-mono text-base font-bold tabular-nums text-primary">
-                        ${formatMoney(s.comision)}
-                      </p>
-                      <p className="font-mono text-xs text-muted-foreground tabular-nums">
-                        de ${formatMoney(s.totalVendido)}
+      <div className="flex-1 w-full max-w-[800px] mx-auto p-4 md:p-6 animate-in fade-in slide-in-from-bottom-8 duration-500">
+        {settlements.length === 0 ? (
+          <div className="text-center py-20 text-muted-foreground bg-white border border-border rounded-lg shadow-sm">
+            <p className="text-[15px] font-sans font-medium">No hay liquidaciones en el historial.</p>
+          </div>
+        ) : (
+          <div className="bg-white border border-border rounded-lg shadow-sm divide-y divide-border">
+            {settlements.map((s) => (
+              <div key={s.id} className="p-4 sm:p-5 hover:bg-slate-50/50 transition-colors">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-sans text-base font-bold text-slate-900">{s.vendedor}</h3>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                      {new Date(s.fecha).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
+                      <span className="mx-2">•</span>
+                      {s.facturas.length} factura{s.facturas.length !== 1 ? "s" : ""}
+                      <span className="mx-2">•</span>
+                      {s.porcentaje}% Comisión
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-auto w-full">
+                    <div className="text-left sm:text-right">
+                      <p className="font-sans text-sm text-slate-500 tabular-nums">Venta: ${formatMoney(s.totalVendido)}</p>
+                      <p className="font-sans text-[15px] font-bold text-green-600 tabular-nums mt-0.5">
+                        Comision ({s.porcentaje}%): ${formatMoney(s.comision)}
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-3 mt-3">
-                    <button
-                      onClick={() => setViewing(viewing?.id === s.id ? null : s)}
-                      className="px-3 py-1.5 text-xs font-sans font-medium bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/70 transition-colors"
-                    >
-                      {viewing?.id === s.id ? "Ocultar" : "Ver Detalle"}
-                    </button>
-                    <button
-                      onClick={() => handlePrint(s)}
-                      className="px-3 py-1.5 text-xs font-sans font-medium bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/70 transition-colors"
-                    >
-                      Imprimir
-                    </button>
-                    <button
-                      onClick={() => handleDelete(s.id)}
-                      className="px-3 py-1.5 text-xs font-sans font-medium text-destructive border border-destructive/30 rounded-md hover:bg-destructive/10 transition-colors"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-
-                  {viewing?.id === s.id && (
-                    <div className="mt-4 border-t border-border pt-4">
-                      <table className="w-full border-collapse">
-                        <thead>
-                          <tr className="border-b border-border">
-                            <th className="text-left text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-1 pr-4">Cliente</th>
-                            <th className="text-left text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-1 pr-4">Factura</th>
-                            <th className="text-left text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-1 pr-4">Cheque</th>
-                            <th className="text-right text-xs uppercase tracking-wide text-muted-foreground font-sans font-medium py-1">Monto</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {s.facturas.map((f) => (
-                            <tr key={f.id} className="border-b border-border">
-                              <td className="py-1.5 pr-4 font-sans text-sm">{f.cliente}</td>
-                              <td className="py-1.5 pr-4 font-mono text-sm">{f.factura}</td>
-                              <td className="py-1.5 pr-4 font-mono text-sm">{f.cheque || "—"}</td>
-                              <td className="py-1.5 text-right font-mono text-sm tabular-nums">${formatMoney(f.monto)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+
+                <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">
+                  <button
+                    onClick={() => handleViewDetail(s)}
+                    className="px-4 py-1.5 text-[13px] font-semibold tracking-wide bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 transition-colors"
+                  >
+                    {viewing?.id === s.id ? "Ocultar Detalle" : "Ver Detalle PDF"}
+                  </button>
+                  <button
+                    onClick={() => handlePrint(s)}
+                    className="px-4 py-1.5 text-[13px] font-semibold tracking-wide bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                  >
+                    Imprimir PDF
+                  </button>
+                  <button
+                    onClick={() => handleEdit(s)}
+                    className="px-4 py-1.5 text-[13px] font-semibold tracking-wide bg-amber-50 text-amber-600 rounded-md hover:bg-amber-100 transition-colors"
+                  >
+                    Editar
+                  </button>
+                  <div className="flex-1" />
+                  <button
+                    onClick={() => handleDelete(s.id)}
+                    className="px-4 py-1.5 text-[13px] font-semibold tracking-wide text-red-600 bg-red-50 hover:bg-red-100 transition-colors rounded-md"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+
+                {viewing?.id === s.id && (
+                  <div className="mt-4 pt-4 border-t border-slate-100 bg-slate-50/80 rounded-b-md p-4 flex flex-col items-center justify-center min-h-[400px]">
+                    {isPdfLoading ? (
+                      <div className="flex flex-col items-center text-muted-foreground gap-3">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                        <p className="text-sm font-medium">Generando vista previa del PDF...</p>
+                      </div>
+                    ) : pdfUrl ? (
+                      <iframe
+                        src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                        className="w-full h-[600px] border border-slate-200 shadow-sm rounded-md bg-white"
+                        title="Vista Previa PDF"
+                      />
+                    ) : (
+                      <p className="text-sm text-red-500">Error al cargar la vista previa.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
