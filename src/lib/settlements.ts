@@ -71,6 +71,20 @@ export async function deleteClient(name: string) {
   if (error) console.error("Error deleting client:", error);
 }
 
+export async function updateVendor(oldName: string, newName: string) {
+  const trimmed = newName.trim();
+  if (!trimmed) return;
+  const { error } = await supabase.from('vendors').update({ name: trimmed }).eq('name', oldName);
+  if (error) console.error("Error updating vendor:", error);
+}
+
+export async function updateClient(oldName: string, newName: string) {
+  const trimmed = newName.trim();
+  if (!trimmed) return;
+  const { error } = await supabase.from('clients').update({ name: trimmed }).eq('name', oldName);
+  if (error) console.error("Error updating client:", error);
+}
+
 // --- Settlements ---
 export async function getSettlements(): Promise<Settlement[]> {
   const { data, error } = await supabase.from('settlements').select('*').order('created_at', { ascending: false });
