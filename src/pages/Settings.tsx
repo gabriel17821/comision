@@ -108,7 +108,7 @@ export default function Settings() {
 
   return (
     <>
-      <div className="flex-1 w-full max-w-[800px] mx-auto p-4 md:p-6 pb-8 overflow-y-auto">
+      <div className="flex-1 w-full max-w-[1035px] mx-auto p-4 md:p-6 pb-8 overflow-y-auto">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-[60vh] text-muted-foreground animate-in fade-in duration-500">
             <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
@@ -134,18 +134,18 @@ export default function Settings() {
               </button>
               {vendorsOpen && (
                 <div className="border-t border-border px-5 py-5 flex flex-col gap-4 animate-in fade-in duration-200">
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
                       value={newVendor}
                       onChange={(e) => setNewVendor(e.target.value)}
-                      placeholder="Nombre del vendedor"
-                      className="flex-1 px-3 py-2 text-sm font-sans bg-slate-50 border border-slate-200 rounded-md focus:border-primary focus:bg-white focus:ring-1 focus:ring-primary outline-none transition-colors shadow-sm"
+                      placeholder="Nombre vendedor"
+                      className="flex-1 px-3 py-2.5 text-sm font-sans bg-slate-50 border border-slate-200 rounded-lg focus:border-primary focus:bg-white focus:ring-1 focus:ring-primary outline-none transition-colors shadow-sm"
                       onKeyDown={(e) => e.key === "Enter" && addVendor()}
                     />
                     <button
                       onClick={addVendor}
-                      className="px-4 py-2 text-[13px] font-semibold tracking-wide bg-primary text-primary-foreground rounded-md hover:bg-primary/90 shadow-sm transition-colors"
+                      className="px-6 py-2.5 text-[13px] font-bold tracking-wide bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 shadow-sm transition-colors uppercase"
                     >
                       Agregar
                     </button>

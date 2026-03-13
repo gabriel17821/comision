@@ -2,15 +2,30 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSettlements, deleteSettlement, formatMoney, Settlement } from "@/lib/settlements";
 import { generateSettlementPDF } from "@/lib/pdfGenerator";
-import { Loader2 } from "lucide-react";
+import { Loader2, Printer, Edit, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function History() {
   const navigate = useNavigate();
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const [sortBy, setSortBy] = useState<string>('date_desc');
   const [filterMonth, setFilterMonth] = useState<string>('all');
+  const [filterSeller, setFilterSeller] = useState<string>('all');
 
   useEffect(() => {
     const loadData = async () => {
@@ -28,10 +43,11 @@ export default function History() {
     loadData();
   }, []);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("¿Seguro que deseas eliminar esta liquidación?")) return;
-    await deleteSettlement(id);
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await deleteSettlement(deleteId);
     setSettlements(await getSettlements());
+    setDeleteId(null);
   };
 
   const handlePrint = async (s: Settlement) => {
@@ -39,11 +55,23 @@ export default function History() {
   };
 
   const handleEdit = (s: Settlement) => {
+    setIsEditing(true);
+    setIsFadingOut(false);
     localStorage.setItem("calc_vendedor", s.vendedor);
     localStorage.setItem("calc_porcentaje", String(s.porcentaje));
     localStorage.setItem("calc_facturas", JSON.stringify(s.facturas));
-    deleteSettlement(s.id);
-    navigate("/");
+    localStorage.setItem("calc_editing_id", s.id);
+    localStorage.setItem("calc_editing_original_date", s.fecha);
+    
+    // Start fading out before navigation
+    setTimeout(() => {
+      setIsFadingOut(true);
+    }, 2500);
+
+    // Navigate when fade-out is complete (3000ms total)
+    setTimeout(() => {
+      navigate("/");
+    }, 3000);
   };
 
   const formatMonthYear = (dateStr: string) => {
@@ -63,7 +91,13 @@ export default function History() {
       return timeB - timeA;
     });
 
-  const filteredSettlements = settlements.filter(s => filterMonth === 'all' || formatMonthYear(s.fecha) === filterMonth);
+  const availableSellers = Array.from(new Set(settlements.map(s => s.vendedor))).sort();
+
+  const filteredSettlements = settlements.filter(s => {
+    const monthMatch = filterMonth === 'all' || formatMonthYear(s.fecha) === filterMonth;
+    const sellerMatch = filterSeller === 'all' || s.vendedor === filterSeller;
+    return monthMatch && sellerMatch;
+  });
 
   const sortedSettlements = [...filteredSettlements].sort((a, b) => {
     if (sortBy === 'venta_desc') return b.totalVendido - a.totalVendido;
@@ -105,30 +139,43 @@ export default function History() {
 
   return (
     <>
-      <div className="flex-1 w-full max-w-[800px] mx-auto p-4 md:p-6 animate-in fade-in duration-500 pb-8">
+      <div className="flex-1 w-full max-w-[1035px] mx-auto p-4 md:p-6 animate-in fade-in duration-500 pb-8">
         
         {/* Controls */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-6 bg-white p-3 border border-border rounded-lg shadow-sm">
-          <div className="flex-1 flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-            <span className="text-[13px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Mes:</span>
-            <select
-              value={filterMonth}
-              onChange={(e) => setFilterMonth(e.target.value)}
-              className="w-full sm:w-auto bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-md text-[14px] font-medium text-slate-700 outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
-            >
-              <option value="all">Todos los registros</option>
-              {availableMonths.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center border-t sm:border-t-0 sm:border-l border-slate-100 pt-3 sm:pt-0 sm:pl-3">
-            <span className="text-[13px] font-semibold text-slate-500 uppercase tracking-wider ml-1">Ordenar por:</span>
-            <div className="flex gap-1.5 flex-wrap">
+        <div className="flex flex-col gap-4 mb-6 bg-white p-4 sm:p-5 border border-border rounded-xl shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-0.5">Mes</span>
+              <select
+                value={filterMonth}
+                onChange={(e) => setFilterMonth(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-lg text-[14px] font-semibold text-slate-700 outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
+              >
+                <option value="all">Todos los meses</option>
+                {availableMonths.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-0.5">Vendedor</span>
+              <select
+                value={filterSeller}
+                onChange={(e) => setFilterSeller(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-lg text-[14px] font-semibold text-slate-700 outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
+              >
+                <option value="all">Todos los vendedores</option>
+                {availableSellers.map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-0.5">Ordenar por</span>
               <select 
                 value={sortBy} 
                 onChange={(e) => setSortBy(e.target.value)}
-                className="w-full sm:w-auto bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-md text-[14px] font-medium text-slate-700 outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
+                className="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-lg text-[14px] font-semibold text-slate-700 outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
               >
                 <option value="date_desc">Más recientes</option>
                 <option value="date_asc">Más antiguos</option>
@@ -164,7 +211,7 @@ export default function History() {
                     <div key={s.id} className="p-4 sm:p-5 hover:bg-slate-50/50 transition-colors">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
-                          <h3 className="font-sans text-base font-bold text-slate-900">Vendedor: {s.vendedor}</h3>
+                          <h3 className="font-sans text-base font-bold text-slate-900 italic">Vendedor: {s.vendedor}</h3>
                           <p className="text-sm text-slate-500 mt-0.5">
                             {new Date(s.fecha).toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "numeric" })}
                             <span className="mx-2">•</span>
@@ -175,8 +222,8 @@ export default function History() {
                         </div>
                         <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-auto w-full">
                           <div className="text-left sm:text-right">
-                            <p className="font-sans text-sm text-slate-500 tabular-nums">Venta: ${formatMoney(s.totalVendido)}</p>
-                            <p className="font-sans text-[15px] font-bold text-green-600 tabular-nums mt-0.5">
+                            <p className="font-sans text-[15px] text-slate-500 tabular-nums">Venta: ${formatMoney(s.totalVendido)}</p>
+                            <p className="font-sans text-[15px] font-bold text-slate-900 tabular-nums mt-0.5">
                               Comision ({s.porcentaje}%): ${formatMoney(s.comision)}
                             </p>
                           </div>
@@ -184,25 +231,34 @@ export default function History() {
                       </div>
 
                       <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">
-                        <button
+                        <Button
+                          variant="default"
+                          size="sm"
                           onClick={() => handlePrint(s)}
-                          className="px-4 py-1.5 text-[13px] font-semibold tracking-wide bg-primary text-white rounded-md hover:bg-primary/90 transition-colors shadow-sm"
+                          className="h-9 px-4 text-[13px] font-bold tracking-wide"
                         >
+                          <Printer className="w-4 h-4 mr-2" />
                           Imprimir PDF
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => handleEdit(s)}
-                          className="px-4 py-1.5 text-[13px] font-semibold tracking-wide bg-slate-700 text-white rounded-md hover:bg-slate-800 transition-colors shadow-sm"
+                          className="h-9 px-4 text-[13px] font-bold tracking-wide bg-slate-100 text-slate-700 hover:bg-slate-200 border-none"
                         >
+                          <Edit className="w-4 h-4 mr-2" />
                           Editar
-                        </button>
+                        </Button>
                         <div className="flex-1" />
-                        <button
-                          onClick={() => handleDelete(s.id)}
-                          className="px-4 py-1.5 text-[13px] font-semibold tracking-wide bg-red-500 text-white hover:bg-red-600 transition-colors rounded-md shadow-sm"
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setDeleteId(s.id)}
+                          className="h-9 px-4 text-[13px] font-bold tracking-wide"
                         >
+                          <Trash2 className="w-4 h-4 mr-2" />
                           Eliminar
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -212,6 +268,56 @@ export default function History() {
           </div>
         )}
       </div>
+
+      {/* ── Edit Integration Overlay ── */}
+      {isEditing && (
+        <div 
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-8 animate-in fade-in duration-500 ease-out"
+          style={{
+            background: "rgba(15,23,42,0.85)",
+            backdropFilter: "blur(8px)",
+            transition: "opacity 0.4s ease-in-out",
+            opacity: isFadingOut ? 0 : 1,
+            pointerEvents: isFadingOut ? "none" : "auto",
+          }}
+        >
+          {/* Spinner */}
+          <svg className="animate-spin" width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <circle cx="28" cy="28" r="24" stroke="#334155" strokeWidth="5" />
+            <path d="M28 4a24 24 0 0 1 24 24" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" />
+          </svg>
+          
+          <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150 fill-mode-both">
+            <h2 className="font-bold text-white mb-2" style={{ fontSize: "22px" }}>
+              Integrando Liquidación
+            </h2>
+            <p className="text-slate-300 font-medium" style={{ fontSize: "16px", letterSpacing: "0.01em" }}>
+              cargando los datos en la calculadora....
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Deletion Confirmation ── */}
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent className="max-w-[400px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl">¿Eliminar liquidación?</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-500">
+              Esta acción no se puede deshacer. Se eliminará permanentemente la liquidación del historial.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-6">
+            <AlertDialogCancel className="font-bold border-slate-200">Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDelete}
+              className="bg-red-500 hover:bg-red-600 font-bold"
+            >
+              Sí, eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

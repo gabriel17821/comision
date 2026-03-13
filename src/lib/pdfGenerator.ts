@@ -19,46 +19,46 @@ const createPDFContainer = (s: Settlement) => {
         </div>
         <div style="text-align: right;">
           <p style="font-size: 18px; font-weight: bold; margin: 0;">VENDEDOR: ${s.vendedor}</p>
-          <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Tasa de Comisión: ${s.porcentaje}%</p>
+          <p style="color: #64748b; font-size: 15px; margin-top: 4px; font-weight: 500;">Tasa de Comisión: ${s.porcentaje}%</p>
         </div>
       </div>
       
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 32px; font-size: 14px;">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px; table-layout: fixed;">
         <thead>
           <tr style="border-bottom: 2px solid #1e293b;">
-            <th style="text-align: left; padding: 8px 0; font-weight: bold;">Cliente</th>
-            <th style="text-align: left; padding: 8px 0; font-weight: bold;">Factura</th>
-            <th style="text-align: left; padding: 8px 0; font-weight: bold;">Cheque</th>
-            <th style="text-align: right; padding: 8px 0; font-weight: bold;">Monto</th>
+            <th style="text-align: left; padding: 10px 0; font-weight: bold; width: 40%; font-size: 15px;">Cliente</th>
+            <th style="text-align: left; padding: 10px 0; font-weight: bold; width: 20%; font-size: 15px;">Factura</th>
+            <th style="text-align: left; padding: 10px 0; font-weight: bold; width: 20%; font-size: 15px;">Cheque</th>
+            <th style="text-align: right; padding: 10px 0; font-weight: bold; width: 20%; font-size: 15px;">Monto</th>
           </tr>
         </thead>
         <tbody>
           ${s.facturas.map((f, i) => `
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 10px 0;">${f.cliente}</td>
-              <td style="padding: 10px 0;">${f.factura}</td>
-              <td style="padding: 10px 0;">${f.cheque || "—"}</td>
-              <td style="padding: 10px 0; text-align: right;">$${formatMoney(f.monto)}</td>
+            <tr style="border-bottom: 1px solid #e2e8f0; page-break-inside: avoid;">
+              <td style="padding: 12px 0; word-wrap: break-word;">${f.cliente}</td>
+              <td style="padding: 12px 0;">${f.factura}</td>
+              <td style="padding: 12px 0;">${f.cheque || "—"}</td>
+              <td style="padding: 12px 0; text-align: right; font-weight: 600;">$${formatMoney(f.monto)}</td>
             </tr>
           `).join("")}
         </tbody>
+        <tfoot style="page-break-inside: avoid;">
+          <tr>
+            <td colspan="2" style="padding-top: 24px;"></td>
+            <td style="padding: 14px 12px; border-top: 2px solid #e2e8f0; font-weight: 700; color: #64748b; font-size: 15px;">Total Vendido:</td>
+            <td style="padding: 14px 12px; border-top: 2px solid #e2e8f0; text-align: right; font-weight: 700; font-size: 16px;">$${formatMoney(s.totalVendido)}</td>
+          </tr>
+          <tr>
+            <td colspan="2"></td>
+            <td style="padding: 16px 12px; font-weight: 700; color: #0f172a; border-top: 1px solid #e2e8f0; border-bottom: 2px solid #0f172a; font-size: 16px;">Comisión (${s.porcentaje}%):</td>
+            <td style="padding: 16px 12px; text-align: right; font-weight: 700; font-size: 18px; color: #0f172a; border-top: 1px solid #e2e8f0; border-bottom: 2px solid #0f172a;">$${formatMoney(s.comision)}</td>
+          </tr>
+        </tfoot>
       </table>
-
-      <div style="display: flex; justify-content: flex-end; width: 100%;">
-        <table style="width: 320px; border-collapse: collapse; font-size: 14px; border: 1px solid #e2e8f0;">
-          <tbody>
-            <tr>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #475569;">Total Vendido:</td>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold; font-size: 16px;">$${formatMoney(s.totalVendido)}</td>
-            </tr>
-            <tr style="background-color: #f8fafc;">
-              <td style="padding: 14px 12px; font-weight: 600; color: #0f172a;">Comisión a Pagar (${s.porcentaje}%):</td>
-              <td style="padding: 14px 12px; text-align: right; font-weight: bold; font-size: 18px; color: #0f172a;">$${formatMoney(s.comision)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
       
+      <div style="font-size: 10px; color: #94a3b8; text-align: center; margin-top: 40px; border-top: 1px dashed #e2e8f0; padding-top: 10px; text-transform: uppercase;">
+        GENERADO EL ${new Date().toLocaleDateString("es-MX", { day: 'numeric', month: 'long', year: 'numeric' })} A LAS ${new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit', hour12: true })}
+      </div>
     </div>
   `;
   document.body.appendChild(container);
@@ -83,7 +83,9 @@ export const generateSettlementPDF = async (s: Settlement) => {
   const opt = getOptions(s);
 
   try {
-    await html2pdf().set(opt).from(container.firstElementChild as HTMLElement).save();
+    const pdfBlob = await html2pdf().set(opt).from(container.firstElementChild as HTMLElement).outputPdf('blob');
+    const url = URL.createObjectURL(pdfBlob);
+    window.open(url, '_blank');
   } finally {
     document.body.removeChild(container);
   }
